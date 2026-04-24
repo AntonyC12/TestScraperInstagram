@@ -1,1 +1,1 @@
-# infrastructure/persistence package
+# package

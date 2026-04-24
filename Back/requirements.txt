@@ -1,16 +1,20 @@
 # =============================================
 # Instagram Scraper — Dependencias del Backend
+# v2.0.0  |  Stack: requests + playwright
 # =============================================
 
-# --- Core de scraping (API privada de Instagram) ---
-instagrapi>=2.1.0          # Cliente API privada IG (sin Selenium/BS4)
-
 # --- Variables de entorno ---
-python-dotenv>=1.0.0       # Carga .env automáticamente
+python-dotenv>=1.0.0        # Carga .env automáticamente
 
-# --- HTTP y utilerías base ---
-requests>=2.31.0           # HTTP client (dependencia de instagrapi)
-Pillow>=10.0.0             # Procesamiento de imágenes (requerido por instagrapi)
+# --- HTTP client ---
+requests>=2.31.0            # Peticiones HTTP directas a los endpoints de IG
 
-# --- Validación de datos ---
-pydantic>=2.0.0            # Validación de modelos (soporte para DDD)
+# --- Browser automation (cookie/token harvest, JS challenge bypass) ---
+playwright>=1.44.0          # Chromium headless para inyección de cookies y extracción de app_id
+
+# --- Anti-detección y reintentos ---
+fake-useragent>=1.5.0       # Rotación de User-Agent realista
+tenacity>=8.2.0             # Retry con backoff exponencial en 429/5xx
+
+# --- Análisis de texto ---
+emoji>=2.11.0               # Extracción y conteo de emojis en captions/comentarios
