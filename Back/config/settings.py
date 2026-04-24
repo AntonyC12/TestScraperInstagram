@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 # Carga .env desde Back/.env
 _ENV_PATH = Path(__file__).parent.parent / ".env"
-load_dotenv(dotenv_path=_ENV_PATH, override=False)
+load_dotenv(dotenv_path=_ENV_PATH, override=True)
 
 
 @dataclass
@@ -60,6 +60,14 @@ class Settings:
     )
     groq_model: str = field(
         default_factory=lambda: os.getenv("GROQ_MODEL", "llama-3.2-90b-vision-preview").strip()
+    )
+
+    # ── Base de Datos ──────────────────────────────────────────────────────────
+    mongo_uri: Optional[str] = field(
+        default_factory=lambda: os.getenv("MONGO_URI")
+    )
+    mongo_database: str = field(
+        default_factory=lambda: os.getenv("MONGO_DATABASE", "instagram_analytics").strip()
     )
 
     # ── Paths ─────────────────────────────────────────────────────────────────
