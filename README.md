@@ -25,6 +25,13 @@ Este proyecto es una plataforma de **Psicometría Digital** diseñada para reali
 
 ---
 
+## 🔮 Próximas Mejoras
+- **Interfaz de Usuario (UI)**: Se contempla la implementación de una interfaz gráfica moderna (Web o Desktop) para facilitar la interacción del usuario sin necesidad de usar la terminal.
+- **Multilenguaje**: Soporte extendido para análisis de captions en diversos idiomas.
+
+
+---
+
 ## 🛠️ Stack Tecnológico & Arquitectura
 
 El proyecto sigue los principios de **Clean Architecture**, asegurando que el código sea testeable, escalable y fácil de mantener.
@@ -80,8 +87,13 @@ python Back/main.py
 
 ---
 
+## ⚠️ Limitaciones del Proyecto
+- **Acceso a Datos**: El sistema solo puede procesar perfiles que sean **públicos**.
+- **Rate Limiting**: Instagram posee mecanismos estrictos de seguridad; el uso intensivo puede derivar en bloqueos temporales de la dirección IP o la cuenta de scraping.
+- **Volatilidad Web**: Cambios estructurales en la plataforma Instagram pueden requerir actualizaciones inmediatas en el motor de scraping.
+
 ## 📄 Notas de Uso Académico
 Este software ha sido desarrollado con el propósito de entender la **identidad digital**. Se recomienda su uso bajo marcos éticos de investigación, respetando siempre la privacidad de los datos y los términos de uso de las plataformas sociales.
 
 ---
-**Desarrollado con ❤️ para la investigación en Arquitectura de Software y Psicología Digital.**
+**Desarrollado para Arquitectura de Software.**
