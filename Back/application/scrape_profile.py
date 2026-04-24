@@ -22,6 +22,8 @@ from infrastructure.instagram.comments_fetcher import fetch_all_post_comments
 from infrastructure.persistence.json_writer import save_to_json
 from infrastructure.ai.gemini_client import GeminiClient
 from application.personality_analysis import PersonalityAnalysisUseCase
+from application.report_generator import ReportGeneratorUseCase
+from infrastructure.persistence.mongo_repository import MongoRepository
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +142,26 @@ class ScrapeProfileUseCase:
         # ── PERSISTIR ────────────────────────────────────────────────────────
         save_to_json(scraped_data, s.output_file)
         
+        # Debug: Verificar si la URI existe
+        if not s.mongo_uri:
+            logger.warning("🚨 MONGO_URI no detectada en la configuración. Revisa el archivo .env")
+        else:
+            logger.info(f"🔗 Intentando conectar a MongoDB Atlas (URI detectada)...")
+            try:
+                mongo_repo = MongoRepository(s.mongo_uri, s.mongo_database)
+                mongo_repo.save_analysis("personality_reports", scraped_data.to_dict())
+                mongo_repo.close()
+            except Exception as e:
+                logger.error(f"❌ Error crítico en el flujo de MongoDB: {e}")
+
+        # Generar Reporte PDF
+        report_service = ReportGeneratorUseCase(s.back_dir / "reports")
+        pdf_path = report_service.execute(scraped_data.to_dict())
+        
         logger.info("==============================================================")
         logger.info(f"  ✅  SCRAPING ROBUSTO COMPLETADO")
         logger.info(f"  📄  JSON guardado en: {s.output_file}")
+        logger.info(f"  📊  PDF generado en: {pdf_path}")
         logger.info("==============================================================")
 
         return scraped_data

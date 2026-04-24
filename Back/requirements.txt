@@ -22,3 +22,9 @@ google-genai>=0.1.0         # Nueva SDK de Gemini (reemplaza legacy google-gener
 pillow>=10.2.0              # Procesamiento de imágenes (necesario para Gemini Vision)
 groq>=0.9.0                 # Cliente para Llama 3.2 Vision y análisis rápido
 httpx>=0.27.0               # Cliente HTTP asíncrono para Groq
+# --- Base de Datos ---
+pymongo[srv]>=4.6.0         # Cliente para MongoDB Atlas
+dnspython>=2.6.0            # Requerido para conexiones mongodb+srv
+
+# --- Reportes ---
+fpdf2>=2.7.0                # Generación de PDF con soporte para Unicode y diseño avanzado

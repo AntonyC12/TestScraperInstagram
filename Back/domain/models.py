@@ -186,4 +186,9 @@ class ScrapedData:
     })
 
     def to_dict(self):
-        return asdict(self)
+        import dataclasses
+        def _fix(obj):
+            if isinstance(obj, dict): return {str(k): _fix(v) for k, v in obj.items()}
+            if isinstance(obj, list): return [_fix(i) for i in obj]
+            return obj
+        return _fix(dataclasses.asdict(self))
