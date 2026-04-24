@@ -1,160 +1,189 @@
 """
 domain/models.py
 ================
-Modelos de datos puros (sin dependencias externas).
-Representan toda la información que el scraper extrae de Instagram.
+Modelos de datos robustos para el análisis de perfiles de Instagram.
+Sigue la estructura v2.1 solicitada con campos de confianza y evidencia.
 """
 
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Any, Optional
 
+# ==============================================================================
+#  AUXILIARES
+# ==============================================================================
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  1. PERFIL
-# ─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class ConfidenceField:
+    """Campo con trazabilidad y confianza."""
+    value: Any = None
+    confidence: float = 0.0
+    evidence: list[str] = field(default_factory=list)
+
+# ==============================================================================
+#  METADATA Y CALIDAD
+# ==============================================================================
+
+@dataclass
+class Metadata:
+    scraped_at: str
+    target_account: str
+    scraper_version: str = "2.1.0"
+    posts_requested: int = 0
+    posts_obtained: int = 0
+    comments_per_post: int = 0
+    total_comments_obtained: int = 0
+    session_valid: bool = True
+    app_id_used: str = ""
+
+@dataclass
+class DataQuality:
+    account_created_approx: str = ""
+    first_post_date: str = ""
+    last_post_date: str = ""
+    posts_requested: int = 0
+    posts_obtained: int = 0
+    comments_obtained: int = 0
+    missing_fields: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+# ==============================================================================
+#  PERFIL Y CONTEXTO
+# ==============================================================================
+
+@dataclass
+class DeclaredContext:
+    language: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    age_range: Optional[str] = None
+    education_level: Optional[str] = None
+    occupation: Optional[str] = None
 
 @dataclass
 class Profile:
     username: str = ""
     full_name: str = ""
-    biography: str = ""
-    profile_pic_url: str = ""
-    profile_pic_hd_url: str = ""
-    external_url: str = ""
-    external_url_linkshimmed: str = ""
     is_private: bool = False
     is_verified: bool = False
     is_business: bool = False
-    category: str = ""
     followers_count: int = 0
     following_count: int = 0
     posts_count: int = 0
-    user_id: str = ""
-    # Aproximación de creación de cuenta inferida del post más antiguo visible
-    account_created_approx: str = ""
-    # Primer post visible (para inferir antigüedad)
-    oldest_post_timestamp: str = ""
+    bio: str = ""
+    external_url: str = ""
+    profile_pic_url: str = ""
+    profile_pic_hd_url: str = ""
+    declared_context: DeclaredContext = field(default_factory=DeclaredContext)
 
+# ==============================================================================
+#  ANÁLISIS DE POST (VISUAL + TEXTO)
+# ==============================================================================
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  2. COMENTARIOS
-# ─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class VisualAnalysis:
+    model_used: Optional[str] = None
+    image_inputs: list[dict] = field(default_factory=list)
+    scene_tags: list[str] = field(default_factory=list)
+    objects: list[str] = field(default_factory=list)
+    people_count: Optional[int] = None
+    has_face: Optional[bool] = None
+    is_selfie: Optional[bool] = None
+    is_group_photo: Optional[bool] = None
+    indoor_outdoor: Optional[str] = None
+    activity_type: Optional[str] = None
+    aesthetic_style: Optional[str] = None
+    emotion_cues: list[str] = field(default_factory=list)
+    text_in_image: Optional[str] = None
+    confidence: float = 0.0
+    evidence: list[str] = field(default_factory=list)
+
+@dataclass
+class TextAnalysis:
+    language_detected: Optional[str] = None
+    sentiment: Optional[str] = None
+    emotion_labels: list[str] = field(default_factory=list)
+    topic_tags: list[str] = field(default_factory=list)
+    verbosity: Optional[str] = None
+    reflexivity: Optional[str] = None
+    tone: Optional[str] = None
+    confidence: float = 0.0
+
+@dataclass
+class DerivedFeatures:
+    posting_hour: Optional[int] = None
+    posting_day: Optional[str] = None
+    caption_length: int = 0
+    emoji_density: float = 0.0
+    hashtag_density: float = 0.0
+    social_presence_score: float = 0.0
+    visual_self_presentation_score: float = 0.0
 
 @dataclass
 class Comment:
-    id: str = ""
-    username: str = ""
-    text: str = ""
-    timestamp: str = ""             # ISO 8601
-    timestamp_unix: int = 0
-    likes_count: int = 0
-    is_owner_comment: bool = False  # True si el autor es el dueño del perfil
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  3. PUBLICACIÓN
-# ─────────────────────────────────────────────────────────────────────────────
+    comment_id: str
+    username: str
+    text: str
+    timestamp: str
+    is_owner_comment: bool = False
+    sentiment: Optional[str] = None
 
 @dataclass
 class Post:
-    id: str = ""
-    shortcode: str = ""
-    timestamp: str = ""             # ISO 8601
-    timestamp_unix: int = 0
-    type: str = ""                  # GraphImage | GraphVideo | GraphSidecar
-    caption: str = ""
+    post_id: str
+    shortcode: str
+    timestamp: str
+    type: str
+    caption_raw: str
+    caption_clean: str
     hashtags: list[str] = field(default_factory=list)
     emojis: list[str] = field(default_factory=list)
-    likes_count: int = 0
-    comments_count: int = 0
-    display_url: str = ""
-    is_video: bool = False
-    video_view_count: Optional[int] = None
-    location: Optional[str] = None
-    location_id: Optional[str] = None
-    # Señales visuales — se dejan como None (análisis de visión = fase futura)
-    visual_signals: dict[str, Any] = field(default_factory=lambda: {
-        "has_face": None,
-        "is_selfie_approx": None,
-        "scene_tags": [],
-        "note": "Visual analysis pending (requires Vision API)"
-    })
-    comments: list[Comment] = field(default_factory=list)
-    comments_fetched: int = 0
+    mentions: list[str] = field(default_factory=list)
+    location: dict = field(default_factory=lambda: {"name": None, "id": None, "confidence": 0.0})
+    engagement: dict = field(default_factory=lambda: {"likes_count": 0, "comments_count": 0})
+    visual_analysis: VisualAnalysis = field(default_factory=VisualAnalysis)
+    text_analysis: TextAnalysis = field(default_factory=TextAnalysis)
+    comments_sample: list[Comment] = field(default_factory=list)
+    derived_features: DerivedFeatures = field(default_factory=DerivedFeatures)
+    display_url: str = "" # Para uso interno del fetcher
 
+    def to_dict(self):
+        return asdict(self)
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  4. ANÁLISIS DE CONTENIDO TEXTUAL
-# ─────────────────────────────────────────────────────────────────────────────
+# ==============================================================================
+#  PERSONALIDAD Y AGREGADOS
+# ==============================================================================
 
 @dataclass
-class LanguageStyle:
-    avg_caption_length: float = 0.0
-    avg_hashtags_per_post: float = 0.0
-    avg_emojis_per_post: float = 0.0
-    tone_classification: str = ""       # formal | informal | emocional | neutro
-    verbosity: str = ""                 # breve | moderado | extenso
-    reflexivity: str = ""               # reflexivo | impulsivo | neutro
-    emotional_indicators: list[str] = field(default_factory=list)
-    top_hashtags: list[dict] = field(default_factory=list)   # [{tag, count}]
-    top_emojis: list[dict] = field(default_factory=list)     # [{emoji, count}]
-
+class BigFiveTrait:
+    score: Optional[float] = None
+    interpretation: str = ""
+    confidence: float = 0.0
+    evidence: list[str] = field(default_factory=list)
 
 @dataclass
-class ContentAnalysis:
-    captions: list[str] = field(default_factory=list)
-    all_hashtags: list[str] = field(default_factory=list)
-    all_emojis: list[str] = field(default_factory=list)
-    owner_comments: list[str] = field(default_factory=list)  # Comentarios del dueño
-    recurring_themes: list[str] = field(default_factory=list)
-    language_style: LanguageStyle = field(default_factory=LanguageStyle)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  5. CONDUCTA TEMPORAL
-# ─────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class TemporalBehavior:
-    posting_frequency_days: float = 0.0   # Promedio de días entre posts
-    posts_per_month: dict[str, int] = field(default_factory=dict)   # {"2024-03": 5}
-    hour_distribution: dict[str, int] = field(default_factory=dict) # {"14": 7}
-    day_distribution: dict[str, int] = field(default_factory=dict)  # {"Monday": 4}
-    most_active_hour: str = ""
-    most_active_day: str = ""
-    first_post_date: str = ""
-    last_post_date: str = ""
-    active_periods: list[str] = field(default_factory=list)   # meses con +2 posts
-    silence_periods: list[str] = field(default_factory=list)  # meses con 0 posts
-    activity_trend: str = ""  # creciente | decreciente | estable | irregular
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  6. INTERACCIÓN SOCIAL
-# ─────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class SocialInteraction:
-    avg_comments_per_post: float = 0.0
-    avg_likes_per_post: float = 0.0
-    total_comments_analyzed: int = 0
-    owner_replies_count: int = 0           # Cuántas veces respondió a comentarios
-    replies_to_own_posts: bool = False
-    interaction_type_distribution: dict[str, int] = field(default_factory=dict)
-    # {"amistosa": N, "afectiva": N, "neutra": N, "polemica": N}
-    top_commenters: list[dict] = field(default_factory=list)  # [{username, count}]
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  7. DATO COMPLETO
-# ─────────────────────────────────────────────────────────────────────────────
+class BigFiveModel:
+    openness: BigFiveTrait = field(default_factory=BigFiveTrait)
+    conscientiousness: BigFiveTrait = field(default_factory=BigFiveTrait)
+    extraversion: BigFiveTrait = field(default_factory=BigFiveTrait)
+    agreeableness: BigFiveTrait = field(default_factory=BigFiveTrait)
+    neuroticism: BigFiveTrait = field(default_factory=BigFiveTrait)
 
 @dataclass
 class ScrapedData:
-    metadata: dict[str, Any] = field(default_factory=dict)
-    profile: Profile = field(default_factory=Profile)
-    posts: list[Post] = field(default_factory=list)
-    content_analysis: ContentAnalysis = field(default_factory=ContentAnalysis)
-    temporal_behavior: TemporalBehavior = field(default_factory=TemporalBehavior)
-    social_interaction: SocialInteraction = field(default_factory=SocialInteraction)
+    metadata: Metadata
+    profile: Profile
+    data_quality: DataQuality
+    posts: list[Post]
+    aggregate_features: dict = field(default_factory=dict)
+    context_variables: dict = field(default_factory=dict)
+    personality_report: Optional[dict] = None
+    model_outputs: dict = field(default_factory=dict)
+    human_review: dict = field(default_factory=lambda: {
+        "reviewed": False,
+        "reviewer_notes": "",
+        "disagreements_with_model": []
+    })
+
+    def to_dict(self):
+        return asdict(self)

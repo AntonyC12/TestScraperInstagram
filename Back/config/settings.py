@@ -8,6 +8,7 @@ La autenticación se hace con cookies del navegador; username/password son opcio
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 from dotenv import load_dotenv
 
 # Carga .env desde Back/.env
@@ -42,6 +43,23 @@ class Settings:
     # ── Playwright ────────────────────────────────────────────────────────────
     playwright_headless: bool = field(
         default_factory=lambda: os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() == "true"
+    )
+
+    # ── Inteligencia Artificial ───────────────────────────────────────────────
+    ai_provider: str = field(
+        default_factory=lambda: os.getenv("AI_PROVIDER", "gemini").lower().strip()
+    )
+    gemini_api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("GEMINI_API_KEY")
+    )
+    gemini_model: str = field(
+        default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+    )
+    groq_api_key: Optional[str] = field(
+        default_factory=lambda: os.getenv("GROQ_API_KEY")
+    )
+    groq_model: str = field(
+        default_factory=lambda: os.getenv("GROQ_MODEL", "llama-3.2-90b-vision-preview").strip()
     )
 
     # ── Paths ─────────────────────────────────────────────────────────────────

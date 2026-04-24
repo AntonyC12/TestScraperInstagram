@@ -16,5 +16,9 @@ playwright>=1.44.0          # Chromium headless para inyección de cookies y ext
 fake-useragent>=1.5.0       # Rotación de User-Agent realista
 tenacity>=8.2.0             # Retry con backoff exponencial en 429/5xx
 
-# --- Análisis de texto ---
+# --- Análisis de texto e imagen ---
 emoji>=2.11.0               # Extracción y conteo de emojis en captions/comentarios
+google-genai>=0.1.0         # Nueva SDK de Gemini (reemplaza legacy google-generativeai)
+pillow>=10.2.0              # Procesamiento de imágenes (necesario para Gemini Vision)
+groq>=0.9.0                 # Cliente para Llama 3.2 Vision y análisis rápido
+httpx>=0.27.0               # Cliente HTTP asíncrono para Groq

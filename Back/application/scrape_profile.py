@@ -1,62 +1,51 @@
 """
 application/scrape_profile.py
 ==============================
-Caso de uso principal: orquesta el flujo completo de scraping.
-
-Flujo:
-  1. Playwright extrae cookies dinámicas + x-ig-app-id
-  2. Se construye requests.Session con todas las cookies + headers
-  3. Se extrae el perfil (profile_fetcher)
-  4. Se extraen los posts (posts_fetcher) — con paginación
-  5. Se extraen comentarios de cada post (comments_fetcher)
-  6. Se ejecutan los analizadores (domain/analyzers)
-  7. Se ensambla ScrapedData y se retorna para persistir
+Orquestador del flujo de scraping Robusto v2.1.
+Incluye análisis visual con Gemini y análisis profundo de personalidad.
 """
 
 from __future__ import annotations
-
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
 from config.settings import Settings
-from domain.models import ScrapedData
-from domain.analyzers import (
-    build_content_analysis,
-    analyze_temporal_behavior,
-    analyze_social_interaction,
-)
+import time
+from domain.models import ScrapedData, Metadata, DataQuality, BigFiveModel, VisualAnalysis
+from domain.analyzers import DomainAnalyzer
 from infrastructure.auth.cookie_session import get_session_data
 from infrastructure.instagram.http_client import build_session, random_delay
 from infrastructure.instagram.profile_fetcher import fetch_profile
 from infrastructure.instagram.posts_fetcher import fetch_posts
 from infrastructure.instagram.comments_fetcher import fetch_all_post_comments
 from infrastructure.persistence.json_writer import save_to_json
+from infrastructure.ai.gemini_client import GeminiClient
+from application.personality_analysis import PersonalityAnalysisUseCase
 
 logger = logging.getLogger(__name__)
 
-SCRAPER_VERSION = "2.0.0"
-
+SCRAPER_VERSION = "2.1.0"
 
 class ScrapeProfileUseCase:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        
+        if settings.ai_provider == "groq":
+            from infrastructure.ai.groq_client import GroqClient
+            self.ai_client = GroqClient(settings.groq_api_key, model_name=settings.groq_model)
+        else:
+            self.ai_client = GeminiClient(settings.gemini_api_key, model_name=settings.gemini_model)
 
     def execute(self) -> ScrapedData:
         s = self.settings
         target = s.target_account
 
-        sep = "=" * 62
-        logger.info(sep)
-        logger.info(f"  🕵️  Instagram Profile Scraper  v{SCRAPER_VERSION}")
-        logger.info(sep)
-        logger.info(f"  Target  : @{target}")
-        logger.info(f"  Posts   : hasta {s.posts_limit}")
-        logger.info(f"  Comments: hasta {s.comments_limit} por post")
-        logger.info(sep)
+        logger.info("==============================================================")
+        logger.info(f"  🕵️  Instagram Profile Scraper  v{SCRAPER_VERSION} (ROBUSTO)")
+        logger.info("==============================================================")
 
-        # ── FASE 1: Playwright — obtener cookies dinámicas y app_id ──────────
-        logger.info("🎭 [Fase 1/5] Iniciando Playwright para validar sesión...")
+        # ── FASE 1: Sesión ───────────────────────────────────────────────────
         session_data = get_session_data(
             target_username=target,
             cookies_dict=s.as_cookies_dict(),
@@ -65,90 +54,95 @@ class ScrapeProfileUseCase:
             cookies_path=s.cookies_file,
             save_cookies=True,
         )
+        http_session = build_session(session_data["cookies"], session_data["app_id"])
 
-        if not session_data.get("is_logged_in"):
-            logger.warning("⚠️  Playwright no pudo confirmar login. Continuando con cookies del .env...")
-
-        cookies = session_data["cookies"]
-        app_id  = session_data["app_id"]
-
-        # ── FASE 2: Construir requests.Session ───────────────────────────────
-        logger.info("🔧 [Fase 2/5] Construyendo HTTP session...")
-        http_session = build_session(cookies, app_id)
-        random_delay(1.0, 2.0)
-
-        # ── FASE 3: Extraer perfil ───────────────────────────────────────────
-        logger.info(f"👤 [Fase 3/5] Extrayendo perfil de @{target}...")
+        # ── FASE 2: Perfil ───────────────────────────────────────────────────
         profile, user_id, end_cursor, initial_edges = fetch_profile(http_session, target)
-        logger.info(
-            f"  ✅ @{profile.username} | "
-            f"Seguidores: {profile.followers_count:,} | "
-            f"Siguiendo: {profile.following_count:,} | "
-            f"Posts: {profile.posts_count:,}"
-        )
+        
+        # Inferencia de contexto inicial
+        if (s.gemini_api_key or s.groq_api_key):
+            logger.info(f"🤖 Infiriendo contexto declarado con {s.ai_provider.upper()}...")
+            context_data = self.ai_client.infer_context_and_demographics(profile.bio, [])
+            profile.declared_context.language = context_data.get("language")
+            profile.declared_context.country = context_data.get("country")
+            profile.declared_context.city = context_data.get("city")
+            profile.declared_context.age_range = context_data.get("age_range")
+            profile.declared_context.occupation = context_data.get("occupation")
 
-        # ── FASE 4: Extraer posts ─────────────────────────────────────────────
-        logger.info(f"📸 [Fase 4/5] Extrayendo hasta {s.posts_limit} posts...")
-        # initial_edges ya viene incluido en fetch_profile — sin request extra.
-        random_delay(1.5, 3.0)
-        posts = fetch_posts(
-            session=http_session,
-            user_id=user_id,
-            initial_edges=initial_edges,
-            initial_cursor=end_cursor,
-            limit=s.posts_limit,
-        )
-        logger.info(f"  ✅ {len(posts)} posts extraídos")
+        # ── FASE 3: Posts ────────────────────────────────────────────────────
+        posts = fetch_posts(http_session, user_id, initial_edges, end_cursor, s.posts_limit)
+        
+        # ── FASE 4: Comentarios ──────────────────────────────────────────────
+        fetch_all_post_comments(http_session, posts, target, s.comments_limit)
+        total_comments = sum(len(p.comments_sample) for p in posts)
 
-        # ── FASE 5: Extraer comentarios ───────────────────────────────────────
-        logger.info(f"💬 [Fase 5/5] Extrayendo comentarios ({s.comments_limit}/post)...")
-        fetch_all_post_comments(
-            session=http_session,
-            posts=posts,
-            owner_username=target,
-            limit_per_post=s.comments_limit,
-        )
-        total_comments = sum(p.comments_fetched for p in posts)
-        logger.info(f"  ✅ {total_comments} comentarios extraídos en total")
+        # ── FASE 5: Análisis Profundo (Visual + Texto) ───────────────────────
+        logger.info(f"🔬 Analizando {len(posts)} posts (Visual + Texto)...")
+        for i, post in enumerate(posts):
+            # Análisis Textual (Heurística)
+            post.text_analysis = DomainAnalyzer.analyze_text(post)
+            post.derived_features = DomainAnalyzer.calculate_derived(post)
+            
+            # Análisis Visual (IA)
+            if (s.gemini_api_key or s.groq_api_key) and post.display_url:
+                logger.info(f"  📸 [{i+1}/{len(posts)}] Analizando imagen: {post.shortcode}")
+                visual_data = self.ai_client.analyze_post_visual(post.display_url, post.caption_raw)
+                post.visual_analysis = VisualAnalysis(
+                    model_used=getattr(self.ai_client, "model_name", "unknown"),
+                    image_inputs=[{"url": post.display_url, "role": "primary"}],
+                    **visual_data
+                )
+                time.sleep(2) # Pequeño respiro para evitar 429
 
-        # ── ANÁLISIS ──────────────────────────────────────────────────────────
-        logger.info("🔬 Ejecutando analizadores de dominio...")
-        content_analysis    = build_content_analysis(posts)
-        temporal_behavior   = analyze_temporal_behavior(posts)
-        social_interaction  = analyze_social_interaction(posts, target)
+        # ── FASE 6: Agregados y Personalidad ─────────────────────────────────
+        logger.info("🧬 Generando análisis de personalidad (Big Five)...")
+        aggregate_features = DomainAnalyzer.build_aggregate_features(posts)
+        
+        personality_report = {}
+        if (s.gemini_api_key or s.groq_api_key):
+            personality_service = PersonalityAnalysisUseCase(self.ai_client)
+            personality_report = personality_service.execute(
+                ScrapedData(
+                    metadata=None, # Dummy para el service
+                    profile=profile,
+                    data_quality=None,
+                    posts=posts
+                )
+            )
 
-        # ── ENSAMBLAR ScrapedData ─────────────────────────────────────────────
+        # ── ENSAMBLAR ────────────────────────────────────────────────────────
         scraped_data = ScrapedData(
-            metadata={
-                "scraped_at":       datetime.now(tz=timezone.utc).isoformat(),
-                "target_account":   target,
-                "scraper_version":  SCRAPER_VERSION,
-                "posts_requested":  s.posts_limit,
-                "posts_obtained":   len(posts),
-                "comments_per_post": s.comments_limit,
-                "total_comments_obtained": total_comments,
-                "session_valid":    session_data.get("is_logged_in", False),
-                "app_id_used":      app_id,
-            },
+            metadata=Metadata(
+                scraped_at=datetime.now(tz=timezone.utc).isoformat(),
+                target_account=target,
+                scraper_version=SCRAPER_VERSION,
+                posts_requested=s.posts_limit,
+                posts_obtained=len(posts),
+                comments_per_post=s.comments_limit,
+                total_comments_obtained=total_comments,
+                session_valid=session_data.get("is_logged_in", False),
+                app_id_used=session_data["app_id"]
+            ),
             profile=profile,
+            data_quality=DataQuality(
+                first_post_date=posts[-1].timestamp if posts else "",
+                last_post_date=posts[0].timestamp if posts else "",
+                posts_requested=s.posts_limit,
+                posts_obtained=len(posts),
+                comments_obtained=total_comments
+            ),
             posts=posts,
-            content_analysis=content_analysis,
-            temporal_behavior=temporal_behavior,
-            social_interaction=social_interaction,
+            aggregate_features=aggregate_features,
+            personality_report=personality_report,
+            model_outputs={"big_five_raw": personality_report.get("traits", {})}
         )
 
-        # ── PERSISTIR ─────────────────────────────────────────────────────────
-        logger.info(f"💾 Guardando resultados en {s.output_file}...")
-        output_path = save_to_json(scraped_data, s.output_file)
-
-        logger.info(sep)
-        logger.info("  ✅  SCRAPING COMPLETADO")
-        logger.info(f"  📄  JSON en: {output_path}")
-        logger.info(f"  👤  Perfil:  @{profile.username} ({profile.full_name})")
-        logger.info(f"  👥  Seguidores: {profile.followers_count:,}")
-        logger.info(f"  📸  Posts: {len(posts)} | 💬 Comentarios: {total_comments}")
-        logger.info(f"  🎨  Tono: {content_analysis.language_style.tone_classification}")
-        logger.info(f"  📅  Frecuencia: {temporal_behavior.posting_frequency_days} días entre posts")
-        logger.info(sep)
+        # ── PERSISTIR ────────────────────────────────────────────────────────
+        save_to_json(scraped_data, s.output_file)
+        
+        logger.info("==============================================================")
+        logger.info(f"  ✅  SCRAPING ROBUSTO COMPLETADO")
+        logger.info(f"  📄  JSON guardado en: {s.output_file}")
+        logger.info("==============================================================")
 
         return scraped_data

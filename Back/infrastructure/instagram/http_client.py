@@ -66,8 +66,9 @@ def build_session(cookies: dict, app_id: str) -> requests.Session:
 
     # ── 2. Configurar User-Agent ─────────────────────────────────────────────
     try:
-        ua = UserAgent(browsers=["chrome"], os=["windows"], platforms=["desktop"])
-        user_agent = ua.random
+        # Desactivamos la carga de datos externos para evitar el warning de fallback
+        ua = UserAgent(use_external_data=False)
+        user_agent = ua.chrome
     except Exception:
         user_agent = _CHROME_UA
 
