@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
-Este proyecto es una plataforma de **Psicometría Digital** diseñada para realizar perfiles psicológicos basados en el modelo de los **Cinco Grandes (OCEAN)** a partir de datos públicos de Instagram. Utiliza Inteligencia Artificial de vanguardia para transformar imágenes y textos en métricas de personalidad con fines académicos y de investigación.
+Este proyecto es una plataforma de **Psicometría Digital** diseñada para realizar perfiles psicológicos basados en el modelo de los **Cinco Grandes (OCEAN)** a partir de datos públicos de Instagram. Utiliza Inteligencia Artificial de vanguardia para transformar imágenes y textos en métricas de personalidad con fines académicos.
 
 ---
 
